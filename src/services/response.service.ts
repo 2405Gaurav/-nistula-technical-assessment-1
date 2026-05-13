@@ -4,7 +4,7 @@
  * Calls Claude claude-sonnet-4-20250514 to produce a guest-facing reply based on:
  *   - The normalised message (guest name, query type, message text)
  *   - Property context (rates, amenities, policies)
- *   - reservation context (but its not specified in the assignment so iam keeping it as null/empty for now)
+ *   - Reservation context (check-in dates, guest count, payment status from DB)
  *
  * Prompt architecture decisions:
  *
@@ -24,8 +24,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import type { NormalisedMessage } from "../types/message.types";
-import { getPropertyContext } from "../utils/propertyContext";
+import type { NormalisedMessage, MessageContext } from "../types/message.types";
 
 // ---------------------------------------------------------------------------
 // Anthropic client — lazy singleton (same pattern as classification service)
@@ -85,7 +84,12 @@ Your job is to reply to guest messages on behalf of the property team.
 // knowledge boundary for factual claims.
 // ---------------------------------------------------------------------------
 
-function buildUserPrompt(normalised: NormalisedMessage, propertyContext: string): string {
+function buildUserPrompt(normalised: NormalisedMessage, context: MessageContext): string {
+  // reservation section is only included when we found one in the DB
+  const reservationSection = context.reservationContext
+    ? `\n## Reservation Context\n${context.reservationContext}\n`
+    : "";
+
   return `## Guest Details
 - Name: ${normalised.guest_name}
 - Source: ${normalised.source}
@@ -95,8 +99,8 @@ function buildUserPrompt(normalised: NormalisedMessage, propertyContext: string)
 - Type: ${normalised.query_type}
 
 ## Property Context
-${propertyContext}
-
+${context.propertyContext}
+${reservationSection}
 ## Guest Message
 "${normalised.message_text}"
 
@@ -116,12 +120,11 @@ Please write a reply to this guest message.`;
  */
 export async function generateGuestReply(
   normalised: NormalisedMessage,
+  context: MessageContext,
 ): Promise<string> {
   const client = getClient();
 
-  // Fetch property context for the referenced property
-  const propertyContext = getPropertyContext(normalised.property_id);
-  const userPrompt = buildUserPrompt(normalised, propertyContext);
+  const userPrompt = buildUserPrompt(normalised, context);
 
   const startTime = performance.now();
 

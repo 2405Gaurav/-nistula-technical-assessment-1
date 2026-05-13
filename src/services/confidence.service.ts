@@ -64,6 +64,11 @@ export function computeConfidence(input: ConfidenceInput): ConfidenceResult {
     score += 0.05;
     console.log("[confidence] +0.05 reservation verified in DB");
   }
+  // reservation context means the AI had real booking details in the prompt
+  if (input.reservationContext !== "") {
+    score += 0.10;
+    console.log("[confidence] +0.10 reservation context available");
+  }
 
   // --- deductions ---
   // complaints always need human eyes — empathy can't be fully automated

@@ -43,7 +43,7 @@ export async function handleWebhook(
   // Step 3 — generate AI reply
   let draftedReply: string;
   try {
-    draftedReply = await generateGuestReply(normalised);
+    draftedReply = await generateGuestReply(normalised, context);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[webhook] AI reply failed: ${msg}`);
@@ -56,6 +56,7 @@ export async function handleWebhook(
     bookingRef: normalised.booking_ref,
     messageText: normalised.message_text,
     propertyContext: context.propertyContext,
+    reservationContext: context.reservationContext,
     hasReservation: context.hasReservation,
   });
 

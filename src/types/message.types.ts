@@ -90,6 +90,7 @@ export interface ConfidenceInput {
   bookingRef: string | null;
   messageText: string;
   propertyContext: string;
+  reservationContext: string;
   hasReservation: boolean;
 }
 

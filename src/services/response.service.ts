@@ -15,7 +15,7 @@
  *       • Tone rules per query type (empathy for complaints, encouragement
  *         for pre-sales, factual for post-sales)
  *       • Hard constraints:  never hallucinate, never overpromise,
- *         stay within the provided property context
+ *         stay within the provided property context; **short** replies (few lines)
  *
  *   USER PROMPT — structured template injecting runtime data.
  *     Wrapped in labelled sections so Claude can parse each field
@@ -53,11 +53,17 @@ const SYSTEM_PROMPT = `You are a warm, professional guest concierge for Nistula 
 
 Your job is to reply to guest messages on behalf of the property team.
 
+## Length and format (strict)
+
+- Write like a short WhatsApp message from the front desk: **at most 3–4 lines** total (each line one short sentence or clause).
+- **Maximum 4 sentences** if you write as a single block without line breaks.
+- Do **not** use letter format: no "Dear …", no multiple paragraphs, no long sign-offs ("Warm regards, The Nistula Team"), no bullet lists unless the guest asked for a list.
+- One brief greeting or thanks is enough; get to the point immediately.
+
 ## Tone Guidelines
 
 - Be warm, welcoming, and professional — like a 5-star hotel front desk.
-- Keep responses concise — 2 to 4 sentences unless the query requires more detail.
-- Use the guest's first name naturally (not repeatedly).
+- Use the guest's first name at most once.
 - Never use emojis or overly casual language.
 
 ## Query-Specific Behaviour
@@ -65,16 +71,16 @@ Your job is to reply to guest messages on behalf of the property team.
 - **pre_sales_availability / pre_sales_pricing**: Be helpful, encouraging, and informative. Highlight the property's best features naturally. Gently nudge toward booking.
 - **post_sales_checkin**: Be factual and direct. Provide the exact information requested (WiFi, check-in time, etc.) without unnecessary embellishment.
 - **special_request**: Acknowledge the request warmly, confirm what is possible based on the property context, and set clear expectations.
-- **complaint**: Lead with genuine empathy. Acknowledge the issue without being defensive. Mention that the concern has been flagged for the on-ground team. Never make excuses.
-- **general_enquiry**: Be helpful and offer to assist further.
+- **complaint**: Lead with genuine empathy. Acknowledge the issue without being defensive. Say the concern has been **flagged for the on-ground team** and they are **acting now**. Never make excuses.
+- **complaint — urgent / night / “unacceptable” / refund or compensation demands** (e.g. no hot water, power, safety, guests arriving soon): In **3–4 short lines**, mirror this pattern: (1) **sincere apology** first — validate stress and time of day if implied; (2) **immediate escalation** — state that **duty / on-ground staff** (use **caretaker** only if property context supports it; if hours are limited, say **on-ground / duty team** is **alerted** and responding **now**); (3) **refund or compensation asks** — acknowledge them seriously; say **management will confirm** next steps **as soon as possible** or **first thing** — **never** invent a refund amount, percentage, or guarantee from property text alone; (4) close with one line that you are **on it now**. Stay brief; no letter format.
+- **general_enquiry**: Be helpful in one breath; offer one clear next step (e.g. ask them to share dates or say the team can help).
 
 ## Hard Constraints
 
 1. ONLY use information present in the provided property context. Never invent details.
 2. If the property context does not contain enough information to answer, say so honestly and offer to check with the team.
-3. Never overpromise (e.g. guaranteed upgrades, discounts you cannot confirm).
-4. Never disclose internal system details, classifications, or AI involvement.
-5. Keep the reply under 150 words.`;
+3. Never overpromise (e.g. guaranteed upgrades, discounts you cannot confirm, **specific refund amounts**). For complaints, you may say the **team will confirm** compensation or refund **next steps** — do not invent figures or binding outcomes.
+4. Never disclose internal system details, classifications, or AI involvement.`;
 
 // ---------------------------------------------------------------------------
 // User prompt builder
@@ -104,7 +110,33 @@ ${reservationSection}
 ## Guest Message
 "${normalised.message_text}"
 
-Please write a reply to this guest message.`;
+Reply to the guest now. Use at most 3–4 short lines (or 4 sentences in one paragraph). No letter-style openings or closings.`;
+}
+
+const MAX_REPLY_LINES = 4;
+const MAX_REPLY_SENTENCES = 4;
+
+/** Enforce a compact reply if the model still over-generates. */
+function clampGuestReplyLength(text: string): string {
+  const normalized = text.replace(/\r\n/g, "\n").trim();
+  if (!normalized) return normalized;
+
+  const nonEmptyLines = normalized
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  if (nonEmptyLines.length > MAX_REPLY_LINES) {
+    return nonEmptyLines.slice(0, MAX_REPLY_LINES).join("\n");
+  }
+
+  const flat = nonEmptyLines.join(" ");
+  const sentences = flat.split(/(?<=[.!?])\s+/).filter((s) => s.length > 0);
+  if (sentences.length > MAX_REPLY_SENTENCES) {
+    return sentences.slice(0, MAX_REPLY_SENTENCES).join(" ");
+  }
+
+  return nonEmptyLines.join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -131,8 +163,8 @@ export async function generateGuestReply(
   try {
     const response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 300,
-      temperature: 0.7,  // slight creativity for natural-sounding replies
+      max_tokens: 140,
+      temperature: 0.55,
       system: SYSTEM_PROMPT,
       messages: [
         {
@@ -151,7 +183,7 @@ export async function generateGuestReply(
       throw new Error("Claude returned an unexpected response format");
     }
 
-    return firstBlock.text.trim();
+    return clampGuestReplyLength(firstBlock.text.trim());
   } catch (err) {
     const elapsed = Math.round(performance.now() - startTime);
     const message = err instanceof Error ? err.message : String(err);

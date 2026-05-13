@@ -80,3 +80,20 @@ export interface ApiResponse<T = unknown> {
   error?: string;
   errors?: Array<{ field: string; message: string }>;
 }
+
+// ---------------------------------------------------------------------------
+// Confidence scoring — input signals and result
+// ---------------------------------------------------------------------------
+
+export interface ConfidenceInput {
+  queryType: QueryType;
+  bookingRef: string | null;
+  messageText: string;
+  propertyContext: string;
+  hasReservation: boolean;
+}
+
+export interface ConfidenceResult {
+  confidenceScore: number;
+  action: MessageAction;
+}

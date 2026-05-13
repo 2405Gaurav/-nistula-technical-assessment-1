@@ -1,33 +1,32 @@
 /**
  * Webhook Controller
  *
- * Orchestrates the full inbound message pipeline:
- *   1. Normalise + classify the validated payload  (normalization service)
- *   2. Generate a guest-facing AI reply            (response service)
- *   3. Return both the normalised message and the reply
- *
- * Controllers own the request/response cycle — services never touch
- * Express objects.  This keeps services pure and testable.
+ * Full pipeline:
+ *   1. Normalise + classify     (normalization service)
+ *   2. Build message context    (context service — raw SQL)
+ *   3. Generate AI reply        (response service — Claude)
+ *   4. Compute confidence score (confidence service — deterministic)
+ *   5. Persist to database      (persistence service — raw SQL)
+ *   6. Return final response
  */
 
 import type { Request, Response } from "express";
 import type { IncomingWebhookPayload } from "../schemas/webhook.schema";
 import { normaliseMessage } from "../services/normalization.service";
+import { buildMessageContext } from "../services/context.service";
 import { generateGuestReply } from "../services/response.service";
-import type { ApiResponse, NormalisedMessage } from "../types/message.types";
+import { computeConfidence } from "../services/confidence.service";
+import { persistConversation } from "../services/persistence.service";
+import type { ApiResponse } from "../types/message.types";
 
-// ---------------------------------------------------------------------------
-// Response shape — normalised message + AI-generated reply
-// ---------------------------------------------------------------------------
-
+// final response shape — matches the assignment spec
 interface WebhookResponse {
-  normalised: NormalisedMessage;
-  ai_reply: string;
+  message_id: string;
+  query_type: string;
+  drafted_reply: string;
+  confidence_score: number;
+  action: string;
 }
-
-// ---------------------------------------------------------------------------
-// POST /api/webhook
-// ---------------------------------------------------------------------------
 
 export async function handleWebhook(
   req: Request,
@@ -38,29 +37,45 @@ export async function handleWebhook(
   // Step 1 — normalise + classify
   const normalised = await normaliseMessage(payload);
 
-  // Step 2 — generate guest reply using Claude
+  // Step 2 — build context (property info + reservation lookup)
+  const context = await buildMessageContext(normalised);
+
+  // Step 3 — generate AI reply
+  let draftedReply: string;
   try {
-    const aiReply = await generateGuestReply(normalised);
-
-    res.status(200).json({
-      success: true,
-      data: {
-        normalised,
-        ai_reply: aiReply,
-      },
-    });
+    draftedReply = await generateGuestReply(normalised);
   } catch (err) {
-    // Claude failed but normalisation succeeded — return what we have
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`[webhook] AI reply generation failed: ${message}`);
-
-    res.status(500).json({
-      success: false,
-      error: "AI reply generation failed",
-      data: {
-        normalised,
-        ai_reply: "We've received your message and our team will get back to you shortly.",
-      },
-    });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[webhook] AI reply failed: ${msg}`);
+    draftedReply = "We've received your message and our team will get back to you shortly.";
   }
+
+  // Step 4 — compute confidence score
+  const { confidenceScore, action } = computeConfidence({
+    queryType: normalised.query_type,
+    bookingRef: normalised.booking_ref,
+    messageText: normalised.message_text,
+    propertyContext: context.propertyContext,
+    hasReservation: context.hasReservation,
+  });
+
+  // Step 5 — persist to database (fire and forget — don't block the response)
+  persistConversation({
+    normalised,
+    draftedReply,
+    confidenceScore,
+    action,
+  });
+
+  // Step 6 — return final response
+  res.status(200).json({
+    success: true,
+    data: {
+      message_id: normalised.message_id,
+      query_type: normalised.query_type,
+      drafted_reply: draftedReply,
+      confidence_score: confidenceScore,
+      action,
+    },
+  });
 }

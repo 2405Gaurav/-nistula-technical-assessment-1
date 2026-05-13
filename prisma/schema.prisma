@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -12,111 +7,181 @@ datasource db {
   provider = "postgresql"
 }
 
+enum ConversationStatus {
+  open
+  resolved
+  escalated
+  closed
+}
+
+enum MessageDirection {
+  inbound
+  outbound
+}
+
+enum QueryType {
+  pre_sales_availability
+  pre_sales_pricing
+  post_sales_checkin
+  special_request
+  complaint
+  general_enquiry
+}
+
+enum MessageAction {
+  auto_send
+  agent_review
+  escalate
+}
+
+enum ReservationStatus {
+  confirmed
+  cancelled
+  completed
+  pending
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  refunded
+  failed
+}
+
 model Guest {
-  id            String          @id @default(uuid())
+  id            String           @id @default(uuid())
+
   fullName      String
 
   conversations Conversation[]
+
   reservations  Reservation[]
 
-  createdAt     DateTime        @default(now())
+  createdAt     DateTime         @default(now())
 }
 
 model Property {
-  id                      String          @id @default(uuid())
-  propertyCode            String          @unique
+  id                      String           @id @default(uuid())
+
+  propertyCode            String           @unique
+
   name                    String
+
   location                String
+
   bedrooms                Int
+
   maxGuests               Int
-  privatePool             Boolean         @default(false)
+
+  privatePool             Boolean          @default(false)
+
   checkInTime             String
+
   checkOutTime            String
+
   baseRatePerNight        Decimal
+
   baseGuestCount          Int
+
   extraGuestCharge        Decimal
+
   wifiPassword            String?
+
   caretakerAvailability   String?
-  chefOnCall              Boolean         @default(false)
-  chefBookingRequired     Boolean         @default(false)
+
+  chefOnCall              Boolean          @default(false)
+
+  chefBookingRequired     Boolean          @default(false)
+
   cancellationPolicy      String?
 
   reservations            Reservation[]
+
   conversations           Conversation[]
 
-  createdAt               DateTime        @default(now())
+  createdAt               DateTime         @default(now())
 }
 
 model Reservation {
-  id              String          @id @default(uuid())
+  id                  String                @id @default(uuid())
 
-  bookingRef      String          @unique
+  bookingRef          String                @unique
 
-  guestId         String
-  propertyId      String
+  guestId             String
 
-  checkInDate     DateTime
-  checkOutDate    DateTime
-  numberOfGuests  Int
-  totalAmount     Decimal
-  paymentStatus   String          @default("pending")
-  status          String          @default("confirmed")
+  propertyId          String
 
-  guest           Guest           @relation(fields: [guestId], references: [id])
-  property        Property        @relation(fields: [propertyId], references: [id])
+  checkInDate         DateTime
 
-  conversations   Conversation[]
+  checkOutDate        DateTime
 
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  numberOfGuests      Int
+
+  totalAmount         Decimal
+
+  paymentStatus       PaymentStatus         @default(pending)
+
+  status              ReservationStatus     @default(confirmed)
+
+  guest               Guest                 @relation(fields: [guestId], references: [id])
+
+  property            Property              @relation(fields: [propertyId], references: [id])
+
+  conversations       Conversation[]
+
+  createdAt           DateTime              @default(now())
+
+  updatedAt           DateTime              @updatedAt
 }
 
 model Conversation {
-  id              String          @id @default(uuid())
+  id                  String                @id @default(uuid())
 
-  guestId         String
-  reservationId   String?
-  propertyId      String
+  guestId             String
 
-  source          String
+  reservationId       String?
 
-  status          String          @default("open")
+  propertyId          String
 
-  guest           Guest           @relation(fields: [guestId], references: [id])
+  source              String
 
-  reservation     Reservation?    @relation(fields: [reservationId], references: [id])
+  status              ConversationStatus    @default(open)
 
-  property        Property        @relation(fields: [propertyId], references: [id])
+  guest               Guest                 @relation(fields: [guestId], references: [id])
 
-  messages        Message[]
+  reservation         Reservation?          @relation(fields: [reservationId], references: [id])
 
-  createdAt       DateTime        @default(now())
+  property            Property              @relation(fields: [propertyId], references: [id])
 
-  updatedAt       DateTime        @updatedAt
+  messages            Message[]
+
+  createdAt           DateTime              @default(now())
+
+  updatedAt           DateTime              @updatedAt
 }
 
 model Message {
-  id                String          @id @default(uuid())
+  id                  String                @id @default(uuid())
 
-  conversationId    String
+  conversationId      String
 
-  direction         String
+  direction           MessageDirection
 
-  messageText       String
+  messageText         String
 
-  queryType         String?
+  queryType           QueryType?
 
-  confidenceScore   Float?
+  confidenceScore     Float?
 
-  action            String?
+  action              MessageAction?
 
-  aiDrafted         Boolean         @default(false)
+  aiDrafted           Boolean               @default(false)
 
-  agentEdited       Boolean         @default(false)
+  agentEdited         Boolean               @default(false)
 
-  autoSent          Boolean         @default(false)
+  autoSent            Boolean               @default(false)
 
-  conversation      Conversation    @relation(fields: [conversationId], references: [id])
+  conversation        Conversation          @relation(fields: [conversationId], references: [id])
 
-  createdAt         DateTime        @default(now())
+  createdAt           DateTime              @default(now())
 }

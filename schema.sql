@@ -49,5 +49,113 @@ CREATE TABLE Message (
     agentEdited BOOLEAN NOT NULL DEFAULT FALSE,
     autoSent BOOLEAN NOT NULL DEFAULT FALSE,
     createdAt TIMESTAMP NOT NULL DEFAULT NOW(),
-    FOREIGN KEY (conversationId) REFERENCES Conversation(id) ON DELETE CASCADE
+    FOREIGN KEY (conversationId) REFERENCES Conversation(id) ON DELETE CASCADE --protecting the referential intergerity when a conversation is deleted all its messages are deleted 
 );
+-- later if required id will add the source/property-id in the message table i dont think i need it till now 
+
+
+now lets create the property table and fill it with the given data for now 
+-- Stores master property information and operational context
+-- used during AI response generation.
+
+CREATE TABLE Property (
+
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    propertyCode VARCHAR(100) UNIQUE NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    location VARCHAR(255) NOT NULL,
+    bedrooms INTEGER NOT NULL,
+    maxGuests INTEGER NOT NULL,
+    privatePool BOOLEAN NOT NULL DEFAULT FALSE,
+    checkInTime VARCHAR(50) NOT NULL,
+    checkOutTime VARCHAR(50) NOT NULL,
+    baseRatePerNight DECIMAL(10,2) NOT NULL,
+    baseGuestCount INTEGER NOT NULL,
+    extraGuestCharge DECIMAL(10,2) NOT NULL,
+    wifiPassword VARCHAR(255),
+    caretakerAvailability VARCHAR(255),
+    chefOnCall BOOLEAN NOT NULL DEFAULT FALSE,
+    chefBookingRequired BOOLEAN NOT NULL DEFAULT FALSE,
+    cancellationPolicy TEXT,
+    createdAt TIMESTAMP NOT NULL DEFAULT NOW()
+);
+--the dummy property 
+INSERT INTO Property (
+    propertyCode,
+    name,
+    location,
+    bedrooms,
+    maxGuests,
+    privatePool,
+    checkInTime,
+    checkOutTime,
+    baseRatePerNight,
+    baseGuestCount,
+    extraGuestCharge,
+    wifiPassword,
+    caretakerAvailability,
+    chefOnCall,
+    chefBookingRequired,
+    cancellationPolicy
+) VALUES (
+    'villa-b1',
+    'Villa B1',
+    'Assagao, North Goa',
+    3,
+    6,
+    TRUE,
+    '2pm',
+    '11am',
+    18000,
+    4,
+    2000,
+    'Nistula@2024',
+    '8am to 10pm',
+    TRUE,
+    TRUE,
+    'Free up to 7 days before check-in'
+);
+
+
+now for the reservation, connecting the property-conversation-booking-etc,
+-- Reservation Table
+-- Stores all booking-related information including guest details,
+-- property ID, dates, pricing, and reservation status.
+--while designing this table i was thinking from a user perspective,like when a user book a property 
+--what details he should have in the booking reference
+--so i included the booking reference number,check-in date,check-out date,number of guests,total amount,payment status,status,
+--created at and updated at i will remove if
+
+CREATE TABLE Reservation (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    guestId UUID NOT NULL,
+    propertyId UUID NOT NULL,
+    bookingRef VARCHAR(100) UNIQUE NOT NULL,
+    checkInDate DATE NOT NULL,
+    checkOutDate DATE NOT NULL,
+    numberOfGuests INTEGER NOT NULL,
+    totalAmount DECIMAL(10,2) NOT NULL,
+    paymentStatus VARCHAR(255) NOT NULL DEFAULT 'pending',
+    status VARCHAR(255) NOT NULL DEFAULT 'confirmed',
+    createdAt TIMESTAMP NOT NULL DEFAULT NOW(),
+    updatedAt TIMESTAMP NOT NULL DEFAULT NOW(),
+    FOREIGN KEY (guestId) REFERENCES Guest(id),
+    FOREIGN KEY (propertyId) REFERENCES Property(id)
+);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

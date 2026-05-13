@@ -56,6 +56,21 @@ export interface NormalisedMessage {
 }
 
 // ---------------------------------------------------------------------------
+// Message context — enriched data from DB lookups for AI prompt building
+// ---------------------------------------------------------------------------
+
+export interface MessageContext {
+  // property info string for AI prompts (from getPropertyContext utility)
+  propertyContext: string;
+
+  // formatted reservation details, or "" if no reservation found
+  reservationContext: string;
+
+  // did we find a reservation for this booking_ref?
+  hasReservation: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // API response envelope — standard shape for all JSON responses
 // ---------------------------------------------------------------------------
 

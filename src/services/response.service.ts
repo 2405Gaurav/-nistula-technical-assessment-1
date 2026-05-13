@@ -4,6 +4,7 @@
  * Calls Claude claude-sonnet-4-20250514 to produce a guest-facing reply based on:
  *   - The normalised message (guest name, query type, message text)
  *   - Property context (rates, amenities, policies)
+ *   - reservation context (but its not specified in the assignment so iam keeping it as null/empty for now)
  *
  * Prompt architecture decisions:
  *

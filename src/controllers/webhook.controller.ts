@@ -17,10 +17,8 @@ import { buildMessageContext } from "../services/context.service";
 import { generateGuestReply } from "../services/response.service";
 import { computeConfidence } from "../services/confidence.service";
 import { persistConversation } from "../services/persistence.service";
-import type { ApiResponse } from "../types/message.types";
-
-// final response shape — matches the assignment spec
-interface WebhookResponse {
+// Response body matches the assessment brief (flat JSON, no envelope).
+interface WebhookResponseBody {
   message_id: string;
   query_type: string;
   drafted_reply: string;
@@ -30,7 +28,7 @@ interface WebhookResponse {
 
 export async function handleWebhook(
   req: Request,
-  res: Response<ApiResponse<WebhookResponse>>,
+  res: Response<WebhookResponseBody>,
 ): Promise<void> {
   const payload = req.body as IncomingWebhookPayload;
 
@@ -68,15 +66,12 @@ export async function handleWebhook(
     action,
   });
 
-  // Step 6 — return final response
+  // Step 6 — return final response (spec shape)
   res.status(200).json({
-    success: true,
-    data: {
-      message_id: normalised.message_id,
-      query_type: normalised.query_type,
-      drafted_reply: draftedReply,
-      confidence_score: confidenceScore,
-      action,
-    },
+    message_id: normalised.message_id,
+    query_type: normalised.query_type,
+    drafted_reply: draftedReply,
+    confidence_score: confidenceScore,
+    action,
   });
 }

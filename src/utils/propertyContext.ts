@@ -1,6 +1,6 @@
 // src/utils/propertyContext.ts
-// Property context is currently loaded from a static utility for assessment purposes.
-// In production this would be fetched dynamically from the Property table in PostgreSQL via Prisma.
+// Property context is loaded from a static map for the assessment (matches the brief’s Villa B1 block).
+// In production this would be loaded from the Property table via the same `pg` pool as the app.
 // i already have made the table fro this purpose , a little bit code changes and it will work with that as well 
 
 export function getPropertyContext(propertyId: string): string {

@@ -12,5 +12,5 @@ import { handleWebhook } from "../controllers/webhook.controller";
 
 export const webhookRouter = Router();
 
-// POST /api/webhook — validate → controller handles the rest
+// POST /webhook/message — validate → controller handles the rest
 webhookRouter.post("/", validate(IncomingWebhookSchema), handleWebhook);

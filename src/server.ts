@@ -5,6 +5,7 @@ import express from "express";
 import cors from "cors";
 import { webhookRouter } from "./routes/webhook.routes";
 import { messagesRouter } from "./routes/messages.routes";
+import { globalLimiter, webhookLimiter } from "./middleware/rateLimiter.middleware";
 
 // import db to trigger connection test on startup
 import "./lib/db";
@@ -14,6 +15,7 @@ const app = express();
 //middleware
 app.use(cors());
 app.use(express.json());
+app.use(globalLimiter);
 
 //routes
 app.get("/", (_, res) => {
@@ -23,7 +25,7 @@ app.get("/", (_, res) => {
   });
 });
 
-app.use("/webhook/message", webhookRouter);
+app.use("/webhook/message", webhookLimiter, webhookRouter);
 app.use("/api/messages", messagesRouter);
 
 //start

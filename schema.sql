@@ -1,6 +1,5 @@
--- The application uses Prisma ORM for runtime database interaction,
--- while schema.sql contains handwritten PostgreSQL DDL statements
--- to explicitly demonstrate relational schema design decisions.
+-- Handwritten PostgreSQL DDL for the Nistula messaging platform.
+-- The Node app uses the `pg` driver (no ORM) against these tables.
 
 -- need this extension for gen_random_uuid() to work, spent like 10 mins figuring out why uuid wasnt generating
 -- postgres doesnt have it by default, pgcrypto gives us the function
@@ -16,7 +15,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- since we are getting guest_name from the webhook payload directly
 CREATE TABLE Guest (
     id        UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    fullName  VARCHAR(255) NOT NULL,
+    fullName  VARCHAR(255) NOT NULL UNIQUE,   -- one row per guest name for this assessment (production would use phone/email)
     createdAt TIMESTAMP    NOT NULL DEFAULT NOW()
 );
 
@@ -133,7 +132,8 @@ CREATE TABLE Conversation (
 
 -- then we have messages table, where it stores the messages of the conversation
 -- and to identify the exact message, we use conversation id, direction (incoming or outgoing),
--- we also store if the ai has drafted a message or not, if the agent has edited a message or not, if the message was sent automatically or not
+-- inbound rows store query_type plus the same confidence_score and action computed for that turn (assessment: per inbound message)
+-- outbound rows store aiDrafted / agentEdited / autoSent
 -- this is what is a big part of the problem statement
 --
 -- biggest design decision here was putting both inbound guest messages AND outbound AI replies in the same table

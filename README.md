@@ -27,6 +27,13 @@ psql -U postgres -d nistula_db -f schema.sql
 ```
 This creates all tables (Guest, Property, Reservation, Conversation, Message) and seeds Villa B1.
 
+**Note:** `Guest.fullName` is `UNIQUE` so one profile is reused per name. If you applied an older schema without this constraint and already have duplicate guest names, drop the database (or dedupe rows) before re-running `schema.sql`.
+
+Optional — seed the sample reservation from the brief (`NIS-2024-0891`) so reservation context appears in prompts and scores higher when both property + booking data exist:
+```bash
+npx tsx seed-reservation.ts
+```
+
 ### 3. Configure environment variables
 ```bash
 cp .env.example .env
@@ -44,17 +51,32 @@ npm run dev
 ```
 
 ### 5. Test the endpoint
+
+The handler returns **flat JSON** exactly as in the brief (no `success` / `data` wrapper):
+
+`{ "message_id", "query_type", "drafted_reply", "confidence_score", "action" }`
+
+Run at least three different scenarios (after `schema.sql` and, for booking-aware tests, `npx tsx seed-reservation.ts`):
+
+**1 — Pre-sales + booking ref (property + reservation context in prompt)**  
 ```bash
-curl -X POST http://localhost:3000/webhook/message \
+curl -s -X POST http://localhost:3000/webhook/message \
   -H "Content-Type: application/json" \
-  -d '{
-    "source": "whatsapp",
-    "guest_name": "Rahul Sharma",
-    "message": "Is the villa available from April 20 to 24? What is the rate for 2 adults?",
-    "timestamp": "2026-05-05T10:30:00Z",
-    "booking_ref": "NIS-2024-0891",
-    "property_id": "villa-b1"
-  }'
+  -d "{\"source\":\"whatsapp\",\"guest_name\":\"Rahul Sharma\",\"message\":\"Is the villa available from April 20 to 24? What is the rate for 2 adults?\",\"timestamp\":\"2026-05-05T10:30:00Z\",\"booking_ref\":\"NIS-2024-0891\",\"property_id\":\"villa-b1\"}"
+```
+
+**2 — Post-sales factual (WiFi / check-in)**  
+```bash
+curl -s -X POST http://localhost:3000/webhook/message \
+  -H "Content-Type: application/json" \
+  -d "{\"source\":\"airbnb\",\"guest_name\":\"Rahul Sharma\",\"message\":\"What is the WiFi password and what time is check-in?\",\"timestamp\":\"2026-05-06T08:00:00Z\",\"booking_ref\":\"NIS-2024-0891\",\"property_id\":\"villa-b1\"}"
+```
+
+**3 — Complaint (must escalate regardless of score)**  
+```bash
+curl -s -X POST http://localhost:3000/webhook/message \
+  -H "Content-Type: application/json" \
+  -d "{\"source\":\"whatsapp\",\"guest_name\":\"Alex\",\"message\":\"The AC is not working. This is unacceptable.\",\"timestamp\":\"2026-05-07T03:00:00Z\",\"booking_ref\":\"NIS-2024-0891\",\"property_id\":\"villa-b1\"}"
 ```
 
 ---
@@ -76,19 +98,21 @@ POST /webhook/message
   │       Claude fallback only if rules return "general_enquiry"
   │
   ├── 4. Context Service
-  │       Fetches property info + reservation lookup from PostgreSQL
+  │       Builds the AI prompt context: Villa B1 facts (static string) +
+  │       optional reservation block from PostgreSQL when booking_ref matches
   │
   ├── 5. Response Service
   │       Sends structured prompt to Claude claude-sonnet-4-20250514
   │       System prompt sets tone per query type
   │
   ├── 6. Confidence Scoring
-  │       Deterministic scoring based on input signals
+  │       Deterministic score from query type + property + reservation signals
   │
   ├── 7. Persistence Service
-  │       Saves guest, conversation, inbound + outbound messages to DB
+  │       Upsert guest (unique name), link conversation to reservation when known,
+  │       store query_type + confidence + action on inbound and outbound rows
   │
-  └── Response
+  └── Response (assessment shape — flat JSON, no wrapper)
         { message_id, query_type, drafted_reply, confidence_score, action }
 ```
 
@@ -96,39 +120,50 @@ POST /webhook/message
 
 ## Confidence Scoring Logic
 
-The confidence score is **deterministic** — it measures how much context was available to the AI when generating the reply, not the quality of the reply itself.
+The score is **deterministic** (0.00–1.00): it estimates how well **grounded** the draft was likely to be, based on **what we put in the prompt** — especially **property context** (Villa B1 facts) and **reservation context** (dates, guests, status from PostgreSQL when `booking_ref` matches). It does **not** re-read the model’s answer to judge prose quality.
 
-### Why score the inputs, not the output?
-Scoring the AI response would require a second Claude call (expensive) or fragile regex checks. Scoring the inputs is free, instant, and reproducible — same inputs always give the same score.
+### Why score inputs, not the reply text?
+Judging the reply would mean a second model call or brittle heuristics. Input-based scoring is cheap, reproducible, and matches the operational question: “Did we have enough authoritative data for automation?”
 
-### Base Score: 0.60
+### How property + reservation work together
+- **Property context** always includes the brief’s Villa B1 block when `property_id` is `villa-b1` (unknown IDs fall back to “Property details not available”, which **does not** count as “known property” for scoring).
+- **Reservation context** is loaded only when `booking_ref` is present **and** a row exists in `Reservation` (e.g. after running `seed-reservation.ts`).
+- When **both** are strong — known property string **and** a non-empty reservation block built from the DB — we add a **+0.05 full-context** bonus on top of the separate reservation signals. That reflects the best case for the pipeline: Claude saw static property facts **plus** verified stay details in the same prompt.
+
+### Base score: 0.60
 
 ### Additions
 | Signal | Bonus | Reasoning |
 |--------|-------|-----------|
-| Query type is `post_sales_checkin` | +0.20 | Simple factual answers (WiFi, check-in time) — AI has exact data |
-| Query type is `pre_sales_availability` | +0.15 | Clear yes/no answer available in property context |
-| Query type is `pre_sales_pricing` | +0.10 | Exact pricing data available in context |
-| Property context found | +0.10 | AI had real property data to work with |
-| Booking reference present | +0.10 | Guest can be identified and verified |
-| Reservation verified in DB | +0.05 | Extra trust — guest exists in our system |
-| Query type is `special_request` | +0.05 | Manageable — caretaker/chef info available |
+| Query type `post_sales_checkin` | +0.20 | Mostly factual (WiFi, times) — aligns with property + stay data |
+| Query type `pre_sales_availability` | +0.15 | Availability is explicit in the property block |
+| Query type `pre_sales_pricing` | +0.10 | Rates and extra-guest rules are in the property block |
+| Query type `special_request` | +0.05 | Caretaker / chef rules are in context |
+| Known property context (not the “details not available” fallback) | +0.10 | Model had real Villa B1 facts |
+| `booking_ref` present | +0.10 | We can tie the thread to a booking |
+| Reservation row found in DB (`hasReservation`) | +0.05 | Verified booking exists |
+| Reservation block included in prompt (non-empty string) | +0.10 | Check-in/out, guests, payment/status were shown to the model |
+| **Full context** — known property **and** reservation block in prompt | +0.05 | Optimisation: both layers of grounding together |
 
 ### Deductions
 | Signal | Penalty | Reasoning |
 |--------|---------|-----------|
-| Query type is `complaint` | -0.40 | Complaints need human empathy and judgment |
-| Query type is `general_enquiry` | -0.20 | Ambiguous — Claude was used as classification fallback |
-| No booking reference | -0.10 | Unverified guest — less trust in context |
-| Message under 10 characters | -0.10 | Too short to classify reliably |
+| Query type `complaint` | −0.40 | Empathy and policy need a human even if facts exist |
+| Query type `general_enquiry` | −0.20 | Often means keyword rules missed; classifier fallback |
+| No `booking_ref` | −0.10 | Harder to verify identity / stay |
+| Message shorter than 10 characters | −0.10 | Too little text to trust classification |
 
-### Action Decision
-```
-if complaint           → "escalate"      (always, regardless of score)
-else if score > 0.85   → "auto_send"     (high confidence, safe to send)
-else if score >= 0.60  → "agent_review"  (moderate, needs human check)
-else                   → "escalate"      (low confidence, escalate)
-```
+The final value is clamped to \[0, 1\] and rounded to two decimals.
+
+### Action mapping (assessment brief)
+| Condition | `action` |
+|-----------|----------|
+| `query_type` is `complaint` | `escalate` (always, even if score is high) |
+| Score **strictly above** 0.85 | `auto_send` |
+| Score between **0.60 and 0.85** (inclusive) | `agent_review` |
+| Score **below** 0.60 | `escalate` |
+
+So **0.85** is **not** auto-sent (only scores **> 0.85** are), matching “above 0.85” in the brief.
 
 ---
 
@@ -171,5 +206,8 @@ src/
 - **No ORM**: Using raw `pg` (node-postgres) with parameterised queries for full SQL control and to demonstrate relational database skills.
 - **Hybrid Classification**: Rule-based keyword matching handles 70-80% of messages for free. Claude is only called for ambiguous messages that fall through to `general_enquiry`.
 - **Service Layer Separation**: Services are pure functions that never touch Express req/res. The controller orchestrates them. This makes every service independently testable.
-- **Fire-and-Forget Persistence**: Database writes happen after the response is sent so the API stays fast. Persistence errors are caught and logged but never crash the response.
+- **Webhook response shape**: `POST /webhook/message` returns the brief’s **flat** JSON object so it matches the assessment example exactly.
+- **Guest profiles**: `Guest.fullName` is unique in SQL; persistence uses `INSERT … ON CONFLICT` so repeat messages from the same name reuse one guest row (demo scope — production would merge on phone/email).
+- **Conversations and reservations**: When `booking_ref` resolves to a `Reservation`, new conversations store `reservationId`; existing threads get `reservationId` backfilled if it was null.
+- **Non-blocking persistence**: `persistConversation` is invoked **without** `await` before `res.json`, so the client gets the draft quickly while PostgreSQL writes complete in the background. Errors are logged and do not change the HTTP body.
 - **Graceful Degradation**: If Claude fails → fallback reply. If DB fails → property context still returned. The pipeline never breaks completely.

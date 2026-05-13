@@ -23,12 +23,28 @@ model Guest {
 }
 
 model Property {
-  id            String          @id
-  name          String
-  location      String
+  id                      String          @id @default(uuid())
+  propertyCode            String          @unique
+  name                    String
+  location                String
+  bedrooms                Int
+  maxGuests               Int
+  privatePool             Boolean         @default(false)
+  checkInTime             String
+  checkOutTime            String
+  baseRatePerNight        Decimal
+  baseGuestCount          Int
+  extraGuestCharge        Decimal
+  wifiPassword            String?
+  caretakerAvailability   String?
+  chefOnCall              Boolean         @default(false)
+  chefBookingRequired     Boolean         @default(false)
+  cancellationPolicy      String?
 
-  reservations  Reservation[]
-  conversations Conversation[]
+  reservations            Reservation[]
+  conversations           Conversation[]
+
+  createdAt               DateTime        @default(now())
 }
 
 model Reservation {
@@ -39,13 +55,20 @@ model Reservation {
   guestId         String
   propertyId      String
 
-  guest           Guest           @relation(fields: [guestId], references: [id])
+  checkInDate     DateTime
+  checkOutDate    DateTime
+  numberOfGuests  Int
+  totalAmount     Decimal
+  paymentStatus   String          @default("pending")
+  status          String          @default("confirmed")
 
+  guest           Guest           @relation(fields: [guestId], references: [id])
   property        Property        @relation(fields: [propertyId], references: [id])
 
   conversations   Conversation[]
 
   createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 }
 
 model Conversation {

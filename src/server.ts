@@ -23,7 +23,7 @@ app.get("/", (_, res) => {
   });
 });
 
-app.use("/api/webhook", webhookRouter);
+app.use("/webhook/message", webhookRouter);
 app.use("/api/messages", messagesRouter);
 
 //start
@@ -31,6 +31,6 @@ const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`POST http://localhost:${PORT}/api/webhook`);
+  console.log(`POST http://localhost:${PORT}/webhook/message`);
   console.log(`GET  http://localhost:${PORT}/api/messages`);
 });

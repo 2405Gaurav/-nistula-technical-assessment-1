@@ -41,6 +41,7 @@ Thumbs.db
 
 # prisma generated files (optional if generated locally)
 prisma/dev.db
+src/generated/
 
 # temporary files
 tmp/

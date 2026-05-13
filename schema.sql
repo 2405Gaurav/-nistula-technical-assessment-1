@@ -40,7 +40,7 @@ CREATE TABLE Conversation (
 CREATE TABLE Message (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     conversationId UUID NOT NULL,
-    direction VARCHAR(255) NOT NULL,
+    direction VARCHAR(255) NOT NULL CHECK (direction IN ('inbound', 'outbound')) ,
     messageText TEXT NOT NULL,
     queryType VARCHAR(255),
     confidenceScore FLOAT,

@@ -5,7 +5,7 @@
  *  1. Validates `req.body` against the schema.
  *  2. On success — replaces `req.body` with the parsed (trimmed/coerced) data
  *     and calls `next()`.
- *  3. On failure — returns a structured 400 response with field-level errors.
+ *  3. On failure — returns a structured 400 response with field-level errors.-> error handling 
  */
 
 import type { Request, Response, NextFunction } from "express";

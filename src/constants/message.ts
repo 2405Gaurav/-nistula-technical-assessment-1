@@ -33,3 +33,53 @@ export const CONVERSATION_STATUSES = [
   "escalated",
   "closed"
 ] as const;
+
+/**
+ * Keyword → QueryType classification rules.
+ *
+ * Order matters: more specific categories come first so that a message
+ * like "the wifi is not working" matches "complaint" before "post_sales_checkin".
+ * "general_enquiry" is the implicit fallback — no keywords needed.
+ */
+export const CLASSIFICATION_KEYWORDS = [
+  {
+    type: "complaint" as const,
+    keywords: [
+      "refund", "unacceptable", "terrible", "complaint",
+      "not working", "broken", "dirty", "disgusting",
+      "worst", "horrible", "damaged",
+    ],
+  },
+  {
+    type: "special_request" as const,
+    keywords: [
+      "chef", "arrange", "request", "need",
+      "organise", "organize", "book a", "can you",
+      "could you", "extra bed", "birthday", "anniversary",
+      "celebration", "decorate",
+    ],
+  },
+  {
+    type: "pre_sales_availability" as const,
+    keywords: [
+      "available", "availability", "vacancy", "vacant",
+      "dates", "free dates", "open dates", "book from", "book for",
+    ],
+  },
+  {
+    type: "pre_sales_pricing" as const,
+    keywords: [
+      "rate", "price", "pricing", "cost", "charge",
+      "tariff", "per night", "how much", "total cost", "extra guest",
+    ],
+  },
+  {
+    type: "post_sales_checkin" as const,
+    keywords: [
+      "wifi", "wi-fi", "check in", "check-in", "checkin",
+      "checkout", "check out", "check-out", "password",
+      "pool", "caretaker", "directions", "address", "parking",
+      "key", "towel",
+    ],
+  },
+] as const;

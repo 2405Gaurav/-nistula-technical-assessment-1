@@ -50,6 +50,9 @@ export interface NormalisedMessage {
 
   /** Property code this message is associated with */
   property_id: string;
+
+  /** Classified query type (hybrid: rule-based + Claude fallback) */
+  query_type: QueryType;
 }
 
 // ---------------------------------------------------------------------------

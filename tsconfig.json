@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     // File Layout
-    "rootDir": "./src",
-    "outDir": "./dist",
+    "rootDir": "./src",//-> all the source code lives here
+    "outDir": "./dist",//compiled js from the ts goes here and the production runs from this 
 
     // Environment Settings
     "module": "nodenext",
@@ -11,7 +11,7 @@
     "types": ["node"],
 
     // Other Outputs
-    "sourceMap": true,
+    "sourceMap": true,//for debugging 
     "declaration": true,
     "declarationMap": true,
 
@@ -19,7 +19,7 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
 
-    // Recommended Options
+   
     "strict": true,
     "isolatedModules": true,
     "moduleDetection": "force",

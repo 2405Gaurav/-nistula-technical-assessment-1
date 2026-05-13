@@ -20,16 +20,12 @@ const GLOBAL_LIMIT_MESSAGE = "Too many requests, please try again later.";
 const WEBHOOK_LIMIT_MESSAGE =
   "Webhook rate limit exceeded. Each request triggers a Claude API call.";
 
-const sendRateLimitJson = (
-  res: Response<ApiResponse>,
-  statusCode: number,
-  error: string,
-): void => {
+function sendRateLimitJson(res: Response<ApiResponse>, statusCode: number, error: string): void {
   res.status(statusCode).json({
     success: false,
     error,
   });
-};
+}
 
 const globalRateLimitHandler: RateLimitExceededEventHandler = (
   _req,
@@ -37,7 +33,7 @@ const globalRateLimitHandler: RateLimitExceededEventHandler = (
   _next,
   options,
 ) => {
-  sendRateLimitJson(res as Response<ApiResponse>, options.statusCode, GLOBAL_LIMIT_MESSAGE);
+  sendRateLimitJson(res, options.statusCode, GLOBAL_LIMIT_MESSAGE);
 };
 
 const webhookRateLimitHandler: RateLimitExceededEventHandler = (
@@ -46,7 +42,7 @@ const webhookRateLimitHandler: RateLimitExceededEventHandler = (
   _next,
   options,
 ) => {
-  sendRateLimitJson(res as Response<ApiResponse>, options.statusCode, WEBHOOK_LIMIT_MESSAGE);
+  sendRateLimitJson(res, options.statusCode, WEBHOOK_LIMIT_MESSAGE);
 };
 
 /**

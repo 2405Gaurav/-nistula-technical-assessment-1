@@ -179,7 +179,8 @@ src/
 │   ├── db.ts                # PostgreSQL connection pool (raw pg)
 │   └── rawQuery.ts          # Raw SQL JOIN queries
 ├── middleware/
-│   └── validation.middleware.ts # Generic Zod validation middleware
+│   ├── validation.middleware.ts   # Generic Zod validation middleware
+│   └── rateLimiter.middleware.ts  # Global + webhook IP rate limits
 ├── routes/
 │   ├── webhook.routes.ts    # POST /webhook/message
 │   └── messages.routes.ts   # GET /api/messages
@@ -211,3 +212,16 @@ src/
 - **Conversations and reservations**: When `booking_ref` resolves to a `Reservation`, new conversations store `reservationId`; existing threads get `reservationId` backfilled if it was null.
 - **Non-blocking persistence**: `persistConversation` is invoked **without** `await` before `res.json`, so the client gets the draft quickly while PostgreSQL writes complete in the background. Errors are logged and do not change the HTTP body.
 - **Graceful Degradation**: If Claude fails → fallback reply. If DB fails → property context still returned. The pipeline never breaks completely.
+
+---
+
+## Bonus: Rate Limiting
+
+Two-layer rate limiting protects the API from abuse:
+
+- **Global:** 100 requests / 15 minutes per IP across all routes (everything after `express.json()` in `server.ts`).
+- **Webhook:** 10 requests / 60 seconds per IP on `POST /webhook/message` only, so the Claude-backed path cannot be flooded cheaply.
+
+When a limit is hit, the server responds with HTTP 429 and JSON in the existing `ApiResponse` shape: `{ "success": false, "error": "<message>" }`, plus standard `RateLimit-*` headers (`standardHeaders: true`, `legacyHeaders: false`).
+
+In production this would use a **Redis** store (for example `ioredis` + `rate-limit-redis`) so limits are shared across multiple server instances behind a load balancer.

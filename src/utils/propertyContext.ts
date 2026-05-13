@@ -1,9 +1,12 @@
-// src/utils/propertyContext.ts
-// Property context is loaded from a static map for the assessment (matches the brief’s Villa B1 block).
-// In production this would be loaded from the Property table via the same `pg` pool as the app.
-// i already have made the table fro this purpose , a little bit code changes and it will work with that as well 
+/**
+ * Fallback property copy when PostgreSQL has no row (or before schema is loaded).
+ * Primary source of truth for prompts is the Property table — see context.service.ts.
+ */
 
-export function getPropertyContext(propertyId: string): string {
+/** Same phrase used by confidence scoring to detect “unknown property”. */
+export const PROPERTY_CONTEXT_UNKNOWN = "Property details not available.";
+
+export function getPropertyContextFallback(propertyCode: string): string {
   const properties: Record<string, string> = {
     "villa-b1": `
 Property: Villa B1, Assagao, North Goa
@@ -16,8 +19,8 @@ Caretaker: Available 8am to 10pm
 Chef on call: Yes, pre-booking required
 Availability April 20-24: Available
 Cancellation: Free up to 7 days before check-in
-    `.trim()
+    `.trim(),
   };
 
-  return properties[propertyId] ?? "Property details not available.";
-}   
+  return properties[propertyCode] ?? PROPERTY_CONTEXT_UNKNOWN;
+}

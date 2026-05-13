@@ -1,5 +1,4 @@
--- Handwritten PostgreSQL DDL for the Nistula messaging platform.
--- The Node app uses the `pg` driver (no ORM) against these tables.
+-- The Node app uses the `pg` driver (no ORM such as Prisma to keep it raw) against these tables.
 
 -- need this extension for gen_random_uuid() to work, spent like 10 mins figuring out why uuid wasnt generating
 -- postgres doesnt have it by default, pgcrypto gives us the function
@@ -9,7 +8,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 
 -- Guest Table
--- well this is the basic guest profile storing, email, phone number is not added here, in case if you need you can add,
+-- well this is the basic guest profile storing, email, phone number is not added here, in case if needed we can can add,
 -- no problmme faced while designing this table
 -- one thing i decided here is to keep it minimal, fullName is enough for now
 -- since we are getting guest_name from the webhook payload directly
@@ -44,6 +43,7 @@ CREATE TABLE Property (
     chefOnCall            BOOLEAN        NOT NULL DEFAULT FALSE,
     chefBookingRequired   BOOLEAN        NOT NULL DEFAULT FALSE,
     cancellationPolicy    TEXT,
+    availabilityNotes     TEXT,           -- optional ops/marketing line for AI (e.g. date-specific availability)
     createdAt             TIMESTAMP      NOT NULL DEFAULT NOW()
 );
 
@@ -54,7 +54,8 @@ INSERT INTO Property (
     checkInTime, checkOutTime,
     baseRatePerNight, baseGuestCount, extraGuestCharge,
     wifiPassword, caretakerAvailability,
-    chefOnCall, chefBookingRequired, cancellationPolicy
+    chefOnCall, chefBookingRequired, cancellationPolicy,
+    availabilityNotes
 ) VALUES (
     'villa-b1',
     'Villa B1',
@@ -64,7 +65,8 @@ INSERT INTO Property (
     18000, 4, 2000,
     'Nistula@2024', '8am to 10pm',
     TRUE, TRUE,
-    'Free up to 7 days before check-in'
+    'Free up to 7 days before check-in',
+    'Availability April 20-24: Available'
 );
 
 
@@ -177,3 +179,11 @@ CREATE INDEX idx_conversation_guest    ON Conversation(guestId);         -- look
 CREATE INDEX idx_conversation_property ON Conversation(propertyId);      -- look up all conversations for a property
 CREATE INDEX idx_reservation_booking   ON Reservation(bookingRef);       -- webhook lookup, matching bookingRef from payload
 CREATE INDEX idx_property_code         ON Property(propertyCode);        -- webhook lookup, matching propertyCode from payload
+
+-- If you already ran an older schema without availabilityNotes, apply:
+-- ALTER TABLE property ADD COLUMN IF NOT EXISTS availabilitynotes TEXT;
+-- UPDATE property SET availabilitynotes = 'Availability April 20-24: Available'
+--   WHERE propertycode = 'villa-b1' AND availabilitynotes IS NULL;
+
+--HARDEST DESIGN DECISION I MADE
+-- Whether to store the messages from guests and AI responses in the same Message table or to use different tables for each seemed to be the toughest choice. The latter would seem more elegant until it came down to displaying a list of messages in the correct order, which then required UNION queries for two tables rather than just sorting by the timestamp column. The compromise I made here is that not all columns are universal; queryType, confidenceScore, and action are meaningful in messages received from guests, whereas aiDrafted, agentEdited, and autoSent are relevant to messages sent from the application. Some columns are thus nullable for certain directions in order to keep queries simple for what is primarily a conversation-focused application.

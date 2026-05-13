@@ -60,7 +60,7 @@ export interface NormalisedMessage {
 // ---------------------------------------------------------------------------
 
 export interface MessageContext {
-  // property info string for AI prompts (from getPropertyContext utility)
+  /** Property facts for the prompt — loaded from the Property table when possible */
   propertyContext: string;
 
   // formatted reservation details, or "" if no reservation found

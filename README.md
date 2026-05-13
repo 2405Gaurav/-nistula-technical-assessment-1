@@ -76,7 +76,7 @@ curl -s -X POST http://localhost:3000/webhook/message \
 ```bash
 curl -s -X POST http://localhost:3000/webhook/message \
   -H "Content-Type: application/json" \
-  -d "{\"source\":\"whatsapp\",\"guest_name\":\"Alex\",\"message\":\"The AC is not working. This is unacceptable.\",\"timestamp\":\"2026-05-07T03:00:00Z\",\"booking_ref\":\"NIS-2024-0891\",\"property_id\":\"villa-b1\"}"
+  -d "{\"source\":\"whatsapp\",\"guest_name\":\"Rahul Sharma\",\"message\":\"The AC is not working. This is unacceptable.\",\"timestamp\":\"2026-05-07T03:00:00Z\",\"booking_ref\":\"NIS-2024-0891\",\"property_id\":\"villa-b1\"}"
 ```
 
 ---
@@ -98,9 +98,9 @@ POST /webhook/message
   │       Claude fallback only if rules return "general_enquiry"
   │
   ├── 4. Context Service
-  │       Builds the AI prompt context: Villa B1 facts (static string) +
-  │       optional reservation block from PostgreSQL when booking_ref matches
-  │
+  │       Property row from PostgreSQL (Property table) by propertyCode;
+  │       reservation block from Reservation + Guest + Property when booking_ref
+  │       matches the guest name on the booking; static fallback only if DB misses
   ├── 5. Response Service
   │       Sends structured prompt to Claude claude-sonnet-4-20250514
   │       System prompt sets tone per query type
@@ -126,9 +126,9 @@ The score is **deterministic** (0.00–1.00): it estimates how well **grounded**
 Judging the reply would mean a second model call or brittle heuristics. Input-based scoring is cheap, reproducible, and matches the operational question: “Did we have enough authoritative data for automation?”
 
 ### How property + reservation work together
-- **Property context** always includes the brief’s Villa B1 block when `property_id` is `villa-b1` (unknown IDs fall back to “Property details not available”, which **does not** count as “known property” for scoring).
+- **Property context** is built from the **`Property`** row for `property_id` (property code). Unknown codes or DB errors fall back to a small static map, then to `Property details not available.` — that fallback **does not** count as “known property” for scoring.
 - **Reservation context** is loaded only when `booking_ref` is present **and** a row exists in `Reservation` (e.g. after running `seed-reservation.ts`).
-- When **both** are strong — known property string **and** a non-empty reservation block built from the DB — we add a **+0.05 full-context** bonus on top of the separate reservation signals. That reflects the best case for the pipeline: Claude saw static property facts **plus** verified stay details in the same prompt.
+- When **both** are strong — known property string **and** a non-empty reservation block built from the DB — we add a **+0.05 full-context** bonus on top of the separate reservation signals. That reflects the best case for the pipeline: Claude saw **Property**-table facts **plus** verified stay details in the same prompt.
 
 ### Base score: 0.60
 
@@ -196,7 +196,7 @@ src/
 ├── types/
 │   └── message.types.ts     # TypeScript interfaces
 ├── utils/
-│   └── propertyContext.ts   # Static property info
+│   └── propertyContext.ts   # Fallback copy + unknown marker when DB has no row
 └── server.ts                # Express app entry point
 ```
 
@@ -209,7 +209,8 @@ src/
 - **Service Layer Separation**: Services are pure functions that never touch Express req/res. The controller orchestrates them. This makes every service independently testable.
 - **Webhook response shape**: `POST /webhook/message` returns the brief’s **flat** JSON object so it matches the assessment example exactly.
 - **Guest profiles**: `Guest.fullName` is unique in SQL; persistence uses `INSERT … ON CONFLICT` so repeat messages from the same name reuse one guest row (demo scope — production would merge on phone/email).
-- **Conversations and reservations**: When `booking_ref` resolves to a `Reservation`, new conversations store `reservationId`; existing threads get `reservationId` backfilled if it was null.
+- **DB-first context**: Prompt property facts come from the `Property` table (with `availabilityNotes` for date-specific lines); reservation lines come from `Reservation` joined to `Guest`/`Property`, only when `booking_ref` matches a row **and** the webhook `guest_name` matches the guest on that booking.
+- **Persistence side effects**: After each pair of messages, `Conversation.status` becomes `escalated` when the pipeline `action` is `escalate`, and `Reservation.updatedAt` is bumped when the turn is linked to a booking.
 - **Non-blocking persistence**: `persistConversation` is invoked **without** `await` before `res.json`, so the client gets the draft quickly while PostgreSQL writes complete in the background. Errors are logged and do not change the HTTP body.
 - **Graceful Degradation**: If Claude fails → fallback reply. If DB fails → property context still returned. The pipeline never breaks completely.
 

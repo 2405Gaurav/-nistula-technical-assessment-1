@@ -6,10 +6,11 @@
  * Flow:
  *   1. Upsert Guest by full name (UNIQUE fullname in schema — one profile per name)
  *   2. Look up Property by propertyCode
- *   3. Resolve Reservation id from booking_ref when present
+ *   3. Resolve Reservation id when booking_ref matches **and** guest name matches reservation guest (integrity)
  *   4. Find or create Conversation; set / backfill reservationId when a booking matches
- *   5. Insert inbound message (query type, confidence, action — same pipeline outcome)
- *   6. Insert outbound message (AI draft, flags, action)
+ *   5. Insert inbound + outbound Message rows
+ *   6. Update Conversation.status (escalated when action is escalate)
+ *   7. Touch Reservation.updatedAt when this turn is tied to a booking
  */
 
 import { pool } from "../lib/db";
@@ -50,12 +51,20 @@ export async function persistConversation(data: PersistenceInput): Promise<void>
     let reservationId: string | null = null;
     if (normalised.booking_ref) {
       const resLookup = await pool.query(
-        `SELECT id FROM reservation WHERE bookingref = $1`,
-        [normalised.booking_ref],
+        `SELECT r.id
+         FROM reservation r
+         JOIN guest g ON r.guestid = g.id
+         WHERE r.bookingref = $1
+           AND lower(trim(g.fullname)) = lower(trim($2))`,
+        [normalised.booking_ref, normalised.guest_name],
       );
       if (resLookup.rows.length > 0) {
         reservationId = resLookup.rows[0].id;
         console.log(`[persist] reservation linked: ${reservationId}`);
+      } else {
+        console.log(
+          `[persist] no reservation row for ref + guest combo: ${normalised.booking_ref} / ${normalised.guest_name}`,
+        );
       }
     }
 
@@ -107,6 +116,19 @@ export async function persistConversation(data: PersistenceInput): Promise<void>
       [conversationId, draftedReply, normalised.query_type, confidenceScore, action, autoSent],
     );
     console.log(`[persist] saved outbound message (action: ${action}, autoSent: ${autoSent})`);
+
+    await pool.query(
+      `UPDATE conversation
+       SET status = CASE WHEN $2 = 'escalate' THEN 'escalated' ELSE status END,
+           updatedat = NOW()
+       WHERE id = $1`,
+      [conversationId, action],
+    );
+
+    if (reservationId) {
+      await pool.query(`UPDATE reservation SET updatedat = NOW() WHERE id = $1`, [reservationId]);
+      console.log("[persist] reservation.updatedAt touched");
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[persist] failed: ${msg}`);

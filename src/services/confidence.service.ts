@@ -19,13 +19,11 @@
  */
 
 import type { ConfidenceInput, ConfidenceResult, MessageAction } from "../types/message.types";
+import { PROPERTY_CONTEXT_UNKNOWN } from "../utils/propertyContext";
 
-/** Property block was loaded (not the unknown-property fallback string). */
+/** Property block was loaded (not the unknown-property fallback). */
 function isPropertyContextKnown(propertyContext: string): boolean {
-  return (
-    propertyContext !== "" &&
-    !propertyContext.includes("Property details not available")
-  );
+  return propertyContext !== "" && propertyContext !== PROPERTY_CONTEXT_UNKNOWN;
 }
 
 export function computeConfidence(input: ConfidenceInput): ConfidenceResult {

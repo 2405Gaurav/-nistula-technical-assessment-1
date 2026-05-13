@@ -54,3 +54,4 @@ temp/
 
 # misc
 *.tgz
+/src/generated/prisma

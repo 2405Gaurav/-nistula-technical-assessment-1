@@ -1,0 +1,99 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Guest {
+  id            String          @id @default(uuid())
+  fullName      String
+
+  conversations Conversation[]
+  reservations  Reservation[]
+
+  createdAt     DateTime        @default(now())
+}
+
+model Property {
+  id            String          @id
+  name          String
+  location      String
+
+  reservations  Reservation[]
+  conversations Conversation[]
+}
+
+model Reservation {
+  id              String          @id @default(uuid())
+
+  bookingRef      String          @unique
+
+  guestId         String
+  propertyId      String
+
+  guest           Guest           @relation(fields: [guestId], references: [id])
+
+  property        Property        @relation(fields: [propertyId], references: [id])
+
+  conversations   Conversation[]
+
+  createdAt       DateTime        @default(now())
+}
+
+model Conversation {
+  id              String          @id @default(uuid())
+
+  guestId         String
+  reservationId   String?
+  propertyId      String
+
+  source          String
+
+  status          String          @default("open")
+
+  guest           Guest           @relation(fields: [guestId], references: [id])
+
+  reservation     Reservation?    @relation(fields: [reservationId], references: [id])
+
+  property        Property        @relation(fields: [propertyId], references: [id])
+
+  messages        Message[]
+
+  createdAt       DateTime        @default(now())
+
+  updatedAt       DateTime        @updatedAt
+}
+
+model Message {
+  id                String          @id @default(uuid())
+
+  conversationId    String
+
+  direction         String
+
+  messageText       String
+
+  queryType         String?
+
+  confidenceScore   Float?
+
+  action            String?
+
+  aiDrafted         Boolean         @default(false)
+
+  agentEdited       Boolean         @default(false)
+
+  autoSent          Boolean         @default(false)
+
+  conversation      Conversation    @relation(fields: [conversationId], references: [id])
+
+  createdAt         DateTime        @default(now())
+}
